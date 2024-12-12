@@ -1,11 +1,11 @@
 package client
 
 import (
-	pb "github.com/micro/micro/v3/proto/events"
-	"github.com/micro/micro/v3/service/client"
-	"github.com/micro/micro/v3/service/context"
-	"github.com/micro/micro/v3/service/events"
-	"github.com/micro/micro/v3/service/events/util"
+	pb "micro.dev/v4/proto/events"
+	"micro.dev/v4/service/client"
+	"micro.dev/v4/service/context"
+	"micro.dev/v4/service/events"
+	"micro.dev/v4/service/events/util"
 )
 
 // NewStore returns an initialized store handler
@@ -24,12 +24,20 @@ func (s *store) Read(topic string, opts ...events.ReadOption) ([]*events.Event, 
 		o(&options)
 	}
 
+	req := &pb.ReadRequest{
+		Topic: topic,
+	}
+
+	if options.Limit > 0 {
+		req.Limit = uint64(options.Limit)
+	}
+
+	if options.Offset > 0 {
+		req.Offset = uint64(options.Offset)
+	}
+
 	// execute the RPC
-	rsp, err := s.client().Read(context.DefaultContext, &pb.ReadRequest{
-		Topic:  topic,
-		Limit:  uint64(options.Limit),
-		Offset: uint64(options.Offset),
-	}, client.WithAuthToken())
+	rsp, err := s.client().Read(context.DefaultContext, req, client.WithAuthToken())
 	if err != nil {
 		return nil, err
 	}

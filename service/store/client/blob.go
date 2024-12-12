@@ -6,10 +6,10 @@ import (
 	"io"
 	"net/http"
 
-	pb "github.com/micro/micro/v3/proto/store"
-	"github.com/micro/micro/v3/service/client"
-	"github.com/micro/micro/v3/service/errors"
-	"github.com/micro/micro/v3/service/store"
+	pb "micro.dev/v4/proto/store"
+	"micro.dev/v4/service/client"
+	"micro.dev/v4/service/errors"
+	"micro.dev/v4/service/store"
 )
 
 const bufferSize = 1024
@@ -160,4 +160,32 @@ func (b *blob) cli() pb.BlobStoreService {
 		b.client = pb.NewBlobStoreService("store", client.DefaultClient)
 	}
 	return b.client
+}
+
+func (b *blob) List(opts ...store.BlobListOption) ([]string, error) {
+
+	// parse the options
+	var options store.BlobListOptions
+	for _, o := range opts {
+		o(&options)
+	}
+
+	// execute the rpc
+	rsp, err := b.cli().List(context.TODO(), &pb.BlobListRequest{
+		Options: &pb.BlobListOptions{
+			Namespace: options.Namespace,
+			Prefix:    options.Prefix,
+		},
+	}, client.WithAuthToken())
+
+	// handle the error
+	if verr := errors.FromError(err); verr != nil && verr.Code == http.StatusNotFound {
+		return nil, store.ErrNotFound
+	} else if verr != nil {
+		return nil, verr
+	} else if err != nil {
+		return nil, err
+	}
+
+	return rsp.Keys, nil
 }

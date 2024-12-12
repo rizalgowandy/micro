@@ -4,10 +4,10 @@ import (
 	"io"
 	"sync"
 
-	pb "github.com/micro/micro/v3/proto/runtime"
-	"github.com/micro/micro/v3/service/client"
-	"github.com/micro/micro/v3/service/context"
-	"github.com/micro/micro/v3/service/runtime"
+	pb "micro.dev/v4/proto/runtime"
+	"micro.dev/v4/service/client"
+	"micro.dev/v4/service/context"
+	"micro.dev/v4/service/runtime"
 )
 
 type svc struct {
@@ -163,6 +163,7 @@ func (s *svc) Create(resource runtime.Resource, opts ...runtime.CreateOption) er
 				Entrypoint: options.Entrypoint,
 				Volumes:    options.Volumes,
 				Instances:  int64(options.Instances),
+				Force:      options.Force,
 			},
 		}
 
@@ -574,7 +575,7 @@ func (s *svc) Delete(resource runtime.Resource, opts ...runtime.DeleteOption) er
 			return runtime.ErrInvalidResource
 		}
 
-		// runtime service dekete request
+		// runtime service delete request
 		req := &pb.DeleteRequest{
 			Resource: &pb.Resource{
 				Service: &pb.Service{

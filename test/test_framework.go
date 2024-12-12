@@ -16,8 +16,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/micro/micro/v3/client/cli/namespace"
-	"github.com/micro/micro/v3/util/user"
+	"micro.dev/v4/util/namespace"
+	"micro.dev/v4/util/user"
 )
 
 const (
@@ -71,8 +71,8 @@ func (c *Command) args(a ...string) []string {
 
 	// disable jwt creds which are injected so the server can run
 	// but shouldn't be passed to the CLI
-	arguments = append(arguments, "-auth_public_key", "")
-	arguments = append(arguments, "-auth_private_key", "")
+	arguments = append(arguments, "-public_key", "")
+	arguments = append(arguments, "-private_key", "")
 
 	// add config flag
 	arguments = append(arguments, "-c", c.Config)
@@ -293,8 +293,6 @@ func newLocalServer(t *T, fname string, opts ...Option) Server {
 	cmd := exec.Command("docker", "run", "--name", fname,
 		fmt.Sprintf("-p=%v:8081", proxyPortnum),
 		fmt.Sprintf("-p=%v:8080", apiPortNum),
-		"-e", "MICRO_PROFILE=ci",
-		"-e", fmt.Sprintf("MICRO_AUTH_DISABLE_ADMIN=%v", options.DisableAdmin),
 		"micro", "server")
 	configFile := configFile(fname)
 	return &ServerDefault{ServerBase{
@@ -360,6 +358,11 @@ func (s *ServerDefault) Run() error {
 		return err
 	}
 
+	// login to admin account
+	if s.opts.Login {
+		Login(s, s.t, "admin", "micro")
+	}
+
 	servicesRequired := []string{"runtime", "registry", "broker", "config", "config", "proxy", "auth", "events", "store"}
 	if err := Try("Calling micro server", s.t, func() ([]byte, error) {
 		out, err := s.Command().Exec("services")
@@ -372,11 +375,6 @@ func (s *ServerDefault) Run() error {
 		return out, err
 	}, 90*time.Second); err != nil {
 		return err
-	}
-
-	// login to admin account
-	if s.opts.Login {
-		Login(s, s.t, "admin", "micro")
 	}
 
 	return nil
@@ -594,7 +592,7 @@ func Login(serv Server, t *T, email, password string) error {
 			return out, errors.New("Login output does not contain 'Success'")
 		}
 		return out, err
-	}, 4*time.Second)
+	}, 15*time.Second)
 }
 
 func ChangeNamespace(cmd *Command, env, namespace string) error {

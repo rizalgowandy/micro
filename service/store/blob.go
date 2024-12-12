@@ -29,6 +29,8 @@ type BlobStore interface {
 	Read(key string, opts ...BlobOption) (io.Reader, error)
 	Write(key string, blob io.Reader, opts ...BlobOption) error
 	Delete(key string, opts ...BlobOption) error
+	// List returns any keys that match, or an empty list with no error if none matched.
+	List(opts ...BlobListOption) ([]string, error)
 }
 
 // BlobOptions contains options to use when interacting with the store
@@ -49,16 +51,35 @@ func BlobNamespace(ns string) BlobOption {
 	}
 }
 
-// BlobNamespace sets the Public option
+// BlobPublic sets the Public option
 func BlobPublic(p bool) BlobOption {
 	return func(o *BlobOptions) {
 		o.Public = p
 	}
 }
 
-// BlobNamespace sets the Public option
+// BlobContentType sets the Public option
 func BlobContentType(contentType string) BlobOption {
 	return func(o *BlobOptions) {
 		o.ContentType = contentType
+	}
+}
+
+type BlobListOptions struct {
+	Namespace string
+	Prefix    string
+}
+
+type BlobListOption func(o *BlobListOptions)
+
+func BlobListNamespace(namespace string) BlobListOption {
+	return func(o *BlobListOptions) {
+		o.Namespace = namespace
+	}
+}
+
+func BlobListPrefix(prefix string) BlobListOption {
+	return func(o *BlobListOptions) {
+		o.Prefix = prefix
 	}
 }

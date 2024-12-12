@@ -25,8 +25,9 @@ import (
 	"sync"
 
 	"github.com/hpcloud/tail"
-	"github.com/micro/micro/v3/service/logger"
-	"github.com/micro/micro/v3/service/runtime"
+	"micro.dev/v4/service/logger"
+	"micro.dev/v4/service/runtime"
+	"micro.dev/v4/util/user"
 )
 
 // defaultNamespace to use if not provided as an option
@@ -34,9 +35,9 @@ const defaultNamespace = "micro"
 
 var (
 	// The directory for logs to be output
-	LogDir = filepath.Join(os.TempDir(), "micro", "logs")
+	LogDir = filepath.Join(user.Dir, "logs")
 	// The source directory where code lives
-	SourceDir = filepath.Join(os.TempDir(), "micro", "uploads")
+	SourceDir = filepath.Join(user.Dir, "uploads")
 )
 
 type localRuntime struct {
@@ -64,6 +65,9 @@ func NewRuntime(opts ...runtime.Option) runtime.Runtime {
 
 	// make the logs directory
 	os.MkdirAll(LogDir, 0755)
+	if logger.V(logger.DebugLevel, logger.DefaultLogger) {
+		logger.Debugf("Micro log directory: %v", LogDir)
+	}
 
 	return &localRuntime{
 		options:    options,
@@ -148,7 +152,7 @@ func (r *localRuntime) Create(resource runtime.Resource, opts ...runtime.CreateO
 		if _, ok := r.namespaces[options.Namespace]; !ok {
 			r.namespaces[options.Namespace] = make(map[string]*service)
 		}
-		if _, ok := r.namespaces[options.Namespace][serviceKey(s)]; ok {
+		if _, ok := r.namespaces[options.Namespace][serviceKey(s)]; ok && !options.Force {
 			return runtime.ErrAlreadyExists
 		}
 
@@ -519,7 +523,10 @@ func (r *localRuntime) Stop() error {
 			if logger.V(logger.DebugLevel, logger.DefaultLogger) {
 				logger.Debugf("Runtime stopping %s", service.Name)
 			}
+			// stop the service
 			service.Stop()
+			// wait for exit
+			service.Wait()
 		}
 	}
 

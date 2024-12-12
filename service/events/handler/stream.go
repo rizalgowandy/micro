@@ -6,12 +6,12 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	pb "github.com/micro/micro/v3/proto/events"
-	"github.com/micro/micro/v3/service/errors"
-	"github.com/micro/micro/v3/service/events"
-	"github.com/micro/micro/v3/service/events/util"
-	"github.com/micro/micro/v3/service/logger"
-	"github.com/micro/micro/v3/util/auth/namespace"
+	pb "micro.dev/v4/proto/events"
+	"micro.dev/v4/service/errors"
+	"micro.dev/v4/service/events"
+	"micro.dev/v4/service/events/util"
+	"micro.dev/v4/service/logger"
+	"micro.dev/v4/util/auth/namespace"
 )
 
 type Stream struct{}
@@ -58,6 +58,8 @@ func (s *Stream) Publish(ctx context.Context, req *pb.PublishRequest, rsp *pb.Pu
 }
 
 func (s *Stream) Consume(ctx context.Context, req *pb.ConsumeRequest, rsp pb.Stream_ConsumeStream) error {
+	logger.Infof("New consumer for %s\n", req.Topic)
+
 	// authorize the request
 	if err := namespace.AuthorizeAdmin(ctx, namespace.DefaultNamespace, "events.Stream.Consume"); err != nil {
 		return err
@@ -78,6 +80,9 @@ func (s *Stream) Consume(ctx context.Context, req *pb.ConsumeRequest, rsp pb.Str
 		opts = append(opts, events.WithRetryLimit(int(req.RetryLimit)))
 	}
 
+	// append the context
+	opts = append(opts, events.WithContext(ctx))
+
 	// create the subscriber
 	evChan, err := events.Consume(req.Topic, opts...)
 	if err != nil {
@@ -92,6 +97,7 @@ func (s *Stream) Consume(ctx context.Context, req *pb.ConsumeRequest, rsp pb.Str
 	mutex := sync.RWMutex{}
 	recvErrChan := make(chan error)
 	sendErrChan := make(chan error)
+
 	go func() {
 		// process messages from the consumer (probably just ACK messages
 		defer close(recvErrChan)
@@ -125,6 +131,7 @@ func (s *Stream) Consume(ctx context.Context, req *pb.ConsumeRequest, rsp pb.Str
 			mutex.Unlock()
 		}
 	}()
+
 	go func() {
 		// process messages coming from the stream
 		defer close(sendErrChan)

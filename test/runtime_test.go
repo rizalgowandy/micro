@@ -249,7 +249,7 @@ func testRunGithubSource(t *T) {
 		if err != nil {
 			return outp, err
 		}
-		if rsp["msg"] != "Hello John" {
+		if rsp["message"] != "Hello John" {
 			return outp, errors.New("Helloworld resonse is unexpected")
 		}
 		return outp, err
@@ -523,7 +523,7 @@ func testRunLocalUpdateAndCall(t *T) {
 		if err != nil {
 			return outp, err
 		}
-		if rsp["msg"] != "Hello Joe" {
+		if rsp["message"] != "Hello Joe" {
 			return outp, errors.New("Response is unexpected")
 		}
 		return outp, err
@@ -570,7 +570,7 @@ func testRunLocalUpdateAndCall(t *T) {
 		if err != nil {
 			return outp, err
 		}
-		if rsp["msg"] != "Hi Joe" {
+		if rsp["message"] != "Hi Joe" {
 			return outp, errors.New("Response is not what's expected")
 		}
 		return outp, err
@@ -659,7 +659,7 @@ func testRunParentFolder(t *T) {
 		t.Fatal(string(outp))
 	}
 
-	gomod := exec.Command("go", "mod", "edit", "-replace", "github.com/micro/micro/v3=github.com/micro/micro/v3@v3.0.0")
+	gomod := exec.Command("go", "mod", "edit", "-replace", "micro.dev/v4=micro.dev/v4@v3.0.0")
 	gomod.Dir = "../test-top-level"
 	if outp, err := gomod.CombinedOutput(); err != nil {
 		t.Fatal(string(outp))
@@ -746,7 +746,7 @@ func testRunNewWithGit(t *T) {
 		t.Fatal(string(outp))
 		return
 	}
-	if _, err := f.WriteString("\nreplace github.com/micro/micro/v3 => github.com/micro/micro/v3 master"); err != nil {
+	if _, err := f.WriteString("\nreplace micro.dev/v4 => micro.dev/v4 master"); err != nil {
 		t.Fatal(string(outp))
 		return
 	}

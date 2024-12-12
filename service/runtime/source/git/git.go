@@ -30,7 +30,6 @@ import (
 	"strings"
 
 	"github.com/teris-io/shortid"
-	"github.com/xanzy/go-gitlab"
 )
 
 const credentialsKey = "GIT_CREDENTIALS"
@@ -221,30 +220,17 @@ func (g *binaryGitter) checkoutGitLabPublic(repo, branchOrCommit string) error {
 }
 
 func (g *binaryGitter) checkoutGitLabPrivate(repo, branchOrCommit string) error {
-	git, err := gitlab.NewClient(g.secrets[credentialsKey])
-	if err != nil {
-		return err
-	}
-	owned := true
-	projects, _, err := git.Projects.ListProjects(&gitlab.ListProjectsOptions{
-		Owned: &owned,
-	})
-	if err != nil {
-		return err
-	}
-	projectID := ""
-	for _, project := range projects {
-		if strings.Contains(repo, project.Name) {
-			projectID = fmt.Sprintf("%v", project.ID)
-		}
-	}
-	if len(projectID) == 0 {
-		return fmt.Errorf("Project id not found for repo %v", repo)
-	}
-	// Example URL:
-	// https://gitlab.com/api/v3/projects/0000000/repository/archive?private_token=XXXXXXXXXXXXXXXXXXXX
-	url := fmt.Sprintf("https://gitlab.com/api/v4/projects/%v/repository/archive?private_token=%v", projectID, g.secrets[credentialsKey])
 
+	repoFolder := strings.ReplaceAll(strings.ReplaceAll(repo, "/", "-"), "https:--", "")
+	g.folder = filepath.Join(os.TempDir(),
+		repoFolder+"-"+shortid.MustGenerate())
+	tarName := strings.ReplaceAll(strings.ReplaceAll(repo, "gitlab.com/", ""), "/", "-")
+
+	url := fmt.Sprintf("%v/-/archive/%v/%v.tar.gz?private_token=%v", repo, branchOrCommit, tarName, g.secrets[credentialsKey])
+
+	if !strings.HasPrefix(url, "https://") {
+		url = "https://" + url
+	}
 	req, _ := http.NewRequest("GET", url, nil)
 	resp, err := g.client.Do(req)
 	if err != nil {
@@ -482,7 +468,7 @@ func IsLocal(workDir, source string, pathExistsFunc ...func(path string) (bool, 
 }
 
 // CheckoutSource checks out a git repo (source) into a local temp directory. It will return the
-// source of the local repo an an error if one occured. Secrets can optionally be passed if the repo
+// source of the local repo an error if one occured. Secrets can optionally be passed if the repo
 // is private.
 func CheckoutSource(source *Source, secrets map[string]string) (string, error) {
 	gitter := NewGitter(secrets)

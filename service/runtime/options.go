@@ -18,7 +18,7 @@ import (
 	"context"
 	"io"
 
-	"github.com/micro/micro/v3/service/client"
+	"micro.dev/v4/service/client"
 )
 
 type Option func(o *Options)
@@ -103,6 +103,8 @@ type CreateOptions struct {
 	ServiceAccount string
 	// Number of instances to run
 	Instances int
+	// Force the service ignore the service status
+	Force bool
 }
 
 // ReadOptions queries runtime services
@@ -241,6 +243,13 @@ func ResourceLimits(r *Resources) CreateOption {
 	}
 }
 
+// WithForce sets the sign to force restart the service
+func WithForce(f bool) CreateOption {
+	return func(o *CreateOptions) {
+		o.Force = f
+	}
+}
+
 // ReadService returns services with the given name
 func ReadService(service string) ReadOption {
 	return func(o *ReadOptions) {
@@ -248,7 +257,7 @@ func ReadService(service string) ReadOption {
 	}
 }
 
-// ReadVersion confifgures service version
+// ReadVersion configures service version
 func ReadVersion(version string) ReadOption {
 	return func(o *ReadOptions) {
 		o.Version = version
@@ -368,7 +377,7 @@ type LogsOptions struct {
 	Context context.Context
 }
 
-// LogsExistingCount confiures how many existing lines to show
+// LogsCount configures how many existing lines to show
 func LogsCount(count int64) LogsOption {
 	return func(l *LogsOptions) {
 		l.Count = count

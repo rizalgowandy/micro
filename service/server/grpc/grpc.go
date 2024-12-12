@@ -22,10 +22,10 @@ import (
 	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
-	"net/http"
 	"reflect"
 	"runtime/debug"
 	"sort"
@@ -35,19 +35,18 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/proto"
-	"github.com/improbable-eng/grpc-web/go/grpcweb"
-	pberr "github.com/micro/micro/v3/proto/errors"
-	"github.com/micro/micro/v3/service/broker"
-	meta "github.com/micro/micro/v3/service/context/metadata"
-	"github.com/micro/micro/v3/service/errors"
-	"github.com/micro/micro/v3/service/logger"
-	"github.com/micro/micro/v3/service/registry"
-	"github.com/micro/micro/v3/service/server"
-	"github.com/micro/micro/v3/util/addr"
-	"github.com/micro/micro/v3/util/backoff"
-	mnet "github.com/micro/micro/v3/util/net"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/netutil"
+	"micro.dev/v4/service/broker"
+	meta "micro.dev/v4/service/context"
+	mer "micro.dev/v4/service/errors"
+	"micro.dev/v4/service/logger"
+	"micro.dev/v4/service/registry"
+	"micro.dev/v4/service/server"
+	pberr "micro.dev/v4/service/server/grpc/proto"
+	"micro.dev/v4/util/addr"
+	"micro.dev/v4/util/backoff"
+	mnet "micro.dev/v4/util/net"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -60,12 +59,12 @@ import (
 
 var (
 	// DefaultMaxRecvMsgSize maximum message that client can receive
-	// (16 MB).
-	DefaultMaxRecvMsgSize = 1024 * 1024 * 16
+	// (1024 MB).
+	DefaultMaxRecvMsgSize = 1024 * 1024 * 1024
 
 	// DefaultMaxSendMsgSize maximum message that client can send
-	// (16 MB).
-	DefaultMaxSendMsgSize = 1024 * 1024 * 16
+	// (1024 MB).
+	DefaultMaxSendMsgSize = 1024 * 1024 * 1024
 )
 
 const (
@@ -231,7 +230,7 @@ func (g *grpcServer) handler(srv interface{}, stream grpc.ServerStream) (err err
 				logger.Error("panic recovered: ", r)
 				logger.Error(string(debug.Stack()))
 			}
-			err = errors.InternalServerError(g.opts.Name, "panic recovered: %v", r)
+			err = mer.InternalServerError(g.opts.Name, "panic recovered: %v", r)
 		} else if err != nil {
 			if logger.V(logger.InfoLevel, logger.DefaultLogger) {
 				logger.Errorf("grpc handler got error: %s", err)
@@ -304,7 +303,7 @@ func (g *grpcServer) handler(srv interface{}, stream grpc.ServerStream) (err err
 	if g.opts.Router != nil {
 		cc, err := g.newGRPCCodec(ct)
 		if err != nil {
-			return errors.InternalServerError(g.opts.Name, err.Error())
+			return mer.InternalServerError(g.opts.Name, err.Error())
 		}
 		codec := &grpcCodec{
 			ServerStream: stream,
@@ -462,7 +461,7 @@ func (g *grpcServer) processRequest(stream grpc.ServerStream, service *service, 
 
 		cc, err := g.newGRPCCodec(ct)
 		if err != nil {
-			return errors.InternalServerError(g.opts.Name, err.Error())
+			return mer.InternalServerError(g.opts.Name, err.Error())
 		}
 		b, err := cc.Marshal(argv.Interface())
 		if err != nil {
@@ -502,7 +501,7 @@ func (g *grpcServer) processRequest(stream grpc.ServerStream, service *service, 
 		if appErr := fn(ctx, r, replyv.Interface()); appErr != nil {
 			var errStatus *status.Status
 			switch verr := appErr.(type) {
-			case *errors.Error:
+			case *mer.Error:
 				perr := &pberr.Error{
 					Id:     verr.Id,
 					Code:   verr.Code,
@@ -583,7 +582,7 @@ func (g *grpcServer) processStream(stream grpc.ServerStream, service *service, m
 		var err error
 		var errStatus *status.Status
 		switch verr := appErr.(type) {
-		case *errors.Error:
+		case *mer.Error:
 			perr := &pberr.Error{
 				Id:     verr.Id,
 				Code:   verr.Code,
@@ -667,10 +666,10 @@ func (g *grpcServer) NewSubscriber(topic string, sb interface{}, opts ...server.
 func (g *grpcServer) Subscribe(sb server.Subscriber) error {
 	sub, ok := sb.(*subscriber)
 	if !ok {
-		return fmt.Errorf("invalid subscriber: expected *subscriber")
+		return errors.New("invalid subscriber: expected *subscriber")
 	}
 	if len(sub.handlers) == 0 {
-		return fmt.Errorf("invalid subscriber: no handler functions")
+		return errors.New("invalid subscriber: no handler functions")
 	}
 
 	if err := validateSubscriber(sb); err != nil {
@@ -845,10 +844,6 @@ func (g *grpcServer) Register() error {
 	for sb := range g.subscribers {
 		handler := g.createSubHandler(sb, g.opts)
 		var opts []broker.SubscribeOption
-		if queue := sb.Options().Queue; len(queue) > 0 {
-			opts = append(opts, broker.Queue(queue))
-		}
-
 		if cx := sb.Options().Context; cx != nil {
 			opts = append(opts, broker.SubscribeContext(cx))
 		}
@@ -1020,28 +1015,6 @@ func (g *grpcServer) Start() error {
 	if err := g.Register(); err != nil {
 		if logger.V(logger.ErrorLevel, logger.DefaultLogger) {
 			logger.Errorf("Server register error: %v", err)
-		}
-	}
-
-	if g.opts.Context != nil {
-		gRPCWebAddr := ":8082"
-		if g.opts.Context.Value(grpcWebPort{}) != nil {
-			if p, ok := g.opts.Context.Value(grpcWebPort{}).(string); ok && p != "" {
-				gRPCWebAddr = p
-			}
-		}
-
-		if c, ok := g.opts.Context.Value(grpcWebOptions{}).([]grpcweb.Option); ok && len(c) > 0 {
-			wrappedGrpc := grpcweb.WrapServer(g.srv, c...)
-			webGRPCServer := &http.Server{
-				Addr:      gRPCWebAddr,
-				TLSConfig: config.TLSConfig,
-				Handler:   http.Handler(wrappedGrpc),
-			}
-
-			go webGRPCServer.ListenAndServe()
-
-			logger.Infof("Server [gRPC-Web] Listening on %s", gRPCWebAddr)
 		}
 	}
 
